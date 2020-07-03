@@ -1,0 +1,99 @@
+#!/usr/bin/env python
+
+import os
+import threading
+import pathlib
+import logging
+import sys
+import argparse
+from queue import Queue
+from workers.copyworker import FileCopyMessage, FileCopyWorker
+from workers.filewritter import FileWritterWorker
+from workers.checksum_match import ChecksumWorker, ChecksumMessage
+
+
+def configure_logging():
+    handlers = []
+    handlers.append(logging.StreamHandler(sys.stdout))
+    handlers.append(logging.FileHandler('copytool.log', 'w'))
+    logging.basicConfig(handlers=handlers, level=logging.INFO,
+                        style='{', format="{asctime} | {levelname} | {name} | {module} | {message}")
+
+
+def run_copy_tool(args):
+    log_queue = Queue()
+    work_queue = Queue()
+    end = threading.Event()
+    filewritter = FileWritterWorker(log_queue, end)
+    workers = [FileCopyWorker(work_queue, log_queue, end, name=f"copyworker-{i}") for i in range(args.workers)]
+
+    for worker in workers:
+        worker.start()
+    filewritter.start()
+
+    original_dir = os.getcwd()
+
+    src_dir = args.copy[0]
+    dst_dir = args.copy[1]
+
+    if not os.path.isabs(src_dir):
+        src_dir = os.path.join(original_dir, src_dir)
+    if not os.path.isabs(dst_dir):
+        dst_dir = os.path.join(original_dir, dst_dir)
+    if not os.path.isdir(dst_dir):
+        pathlib.Path(dst_dir).mkdir(parents=True)
+
+    for dirpath, dirnames, filenames in os.walk(src_dir):
+        rel_path = os.path.relpath(dirpath, src_dir)
+        for f in filenames:
+            src = os.path.join(dirpath, f)
+            dst = os.path.join(dst_dir, rel_path, f)
+            work_queue.put(FileCopyMessage(src, dst))
+
+    work_queue.join()
+    log_queue.join()
+    end.set()
+    for worker in workers:
+        worker.join()
+    filewritter.join()
+
+
+def run_check_tool(args):
+    work_queue = Queue()
+    end = threading.Event()
+    workers = [ChecksumWorker(work_queue, end, name=f"checksumworker-{i}") for i in range(args.workers)]
+
+    for worker in workers:
+        worker.start()
+
+    workdir = args.check
+    if not os.path.isabs(workdir):
+        workdir = os.path.join(os.getcwd(), workdir)
+
+    for dirpath, dirnames, filenames in os.walk(workdir):
+        for f in filenames:
+            if f == "checksum.sha3":
+                work_queue.put(ChecksumMessage(dirpath))
+                break
+
+    work_queue.join()
+    end.set()
+    for worker in workers:
+        worker.join()
+
+
+if __name__ == "__main__":
+
+    configure_logging()
+
+    parser = argparse.ArgumentParser()
+    workertype_group = parser.add_mutually_exclusive_group(required=True)
+    workertype_group.add_argument("--copy", nargs=2, metavar=('src', 'dst') , help="Copy mode. Copy the directory src to dst. The checksum is checked before and after copying each file to make sure it was successfully copied. Save checksum files in dst to be used with --check later. Produces a logfile in the current directory")
+    workertype_group.add_argument("--check", metavar='dir', help="Check mode. Verify that each file in the specified directory (and subdirectories) still match it's checksum. Each directory should have a checksum.sha3 file with the checksum of each file. Produces a logfile in the current directory")
+    parser.add_argument("--workers", default=os.cpu_count(), help="Number of workers to use. Default to the number of cpu cores")
+    args = parser.parse_args()
+
+    if args.copy:
+        run_copy_tool(args)
+    elif args.check:
+        run_check_tool(args)
