@@ -44,7 +44,7 @@ class ChecksumWorker(threading.Thread):
                     lines = f.readlines()
                     while lines:
                         for line in lines:
-                            old_checksum, filename = line.rstrip('\n').split("  ")
+                            old_checksum, filename = line.rstrip('\n').split("  ", 1)
                             f_abs = os.path.join(message.directory, filename)
                             try:
                                 current_checksum = self.__compute_file_hash(f_abs)
