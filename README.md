@@ -15,7 +15,7 @@ optional arguments:
                      be used with --check later. Produces a logfile in the
                      current directory
   --check dir        Check mode. Verify that each file in the specified
-                     directory (and subdirectories) still match it's checksum.
+                     directory (and subdirectories) still matches its checksum.
                      Each directory should have a checksum.sha3 file with the
                      checksum of each file. Produces a logfile in the current
                      directory
