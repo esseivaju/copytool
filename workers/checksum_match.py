@@ -8,14 +8,15 @@ from queue import Queue, Empty
 
 class ChecksumMessage:
 
-    def __init__(self, directory):
-        self.directory = directory
+    def __init__(self, hash_entry):
+        self.hash_entry = hash_entry
 
 
 class ChecksumWorker(threading.Thread):
 
-    def __init__(self, work_queue: Queue, stop_event: threading.Event, *args, **kwargs):
+    def __init__(self, base_directory: str, work_queue: Queue, stop_event: threading.Event, *args, **kwargs):
         super().__init__(*args, **kwargs)
+        self.__base_dir = base_directory
         self.__work_queue = work_queue
         self.__end = stop_event
         self.__hash_buffer = memoryview(bytearray(1024 * 128))
@@ -37,23 +38,16 @@ class ChecksumWorker(threading.Thread):
             except Empty:
                 continue
             else:
-                checksum_file = os.path.join(message.directory, "checksum.sha3")
-                if not os.path.isfile(checksum_file):
-                    self.__logger.warning(f"Checksum file doesn't exist in {message.directory}")
-                with open(checksum_file, 'r') as f:
-                    lines = f.readlines()
-                    while lines:
-                        for line in lines:
-                            old_checksum, filename = line.rstrip('\n').split("  ", 1)
-                            f_abs = os.path.join(message.directory, filename)
-                            try:
-                                current_checksum = self.__compute_file_hash(f_abs)
-                            except FileNotFoundError:
-                                self.__logger.critical(f"{f_abs}: File doesn't exist")
-                            else:
-                                if current_checksum == old_checksum:
-                                    self.__logger.info(f"{f_abs}: Checksum OK")
-                                else:
-                                    self.__logger.critical(f"{f_abs}: Checksum mismatch")
-                        lines = f.readlines()
+                line = message.hash_entry
+                old_checksum, filename = line.rstrip('\n').split("  ", 1)
+                f_abs = os.path.join(self.__base_dir, filename)
+                try:
+                    current_checksum = self.__compute_file_hash(f_abs)
+                except FileNotFoundError:
+                    self.__logger.critical(f"{f_abs}: File doesn't exist")
+                else:
+                    if current_checksum == old_checksum:
+                        self.__logger.info(f"{f_abs}: Checksum OK")
+                    else:
+                        self.__logger.critical(f"{f_abs}: Checksum mismatch")
                 self.__work_queue.task_done()

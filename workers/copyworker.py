@@ -18,8 +18,10 @@ class FileCopyMessage:
 
 class FileCopyWorker(threading.Thread):
 
-    def __init__(self, work_queue: Queue, log_queue: Queue, stop_event: threading.Event, *args, **kwargs):
+    def __init__(self, checksum_file: str, work_queue: Queue, log_queue: Queue, stop_event: threading.Event, *args, **kwargs):
         super().__init__(*args, **kwargs)
+        self.__checksum_file = checksum_file
+        self.__base_dir = os.path.dirname(self.__checksum_file)
         self.__work_queue = work_queue
         self.__log_queue = log_queue
         self.__end = stop_event
@@ -35,8 +37,11 @@ class FileCopyWorker(threading.Thread):
         return digest
 
     def __log_digest(self, digest, digested_file):
-        log_to = os.path.join(os.path.dirname(digested_file), "checksum.sha3")
-        message = FileWritterMessage(log_to, f"{digest}  {os.path.basename(digested_file)}\n")
+        log_to = self.__checksum_file
+        rel_path = os.path.relpath(
+            os.path.dirname(digested_file), self.__base_dir)
+        rel_path = os.path.join(rel_path, os.path.basename(digested_file))
+        message = FileWritterMessage(log_to, f"{digest}  {rel_path}\n")
         self.__log_queue.put(message)
 
     def pre_copy(self, message):
@@ -63,7 +68,9 @@ class FileCopyWorker(threading.Thread):
                 shutil.copy(message.src, message.dst)
                 digest_post = self.post_copy(message)
                 if digest_pre == digest_post:
-                    self.__logger.info(f"File {message.src} copied successfully.")
+                    self.__logger.info(
+                        f"File {message.src} copied successfully.")
                 else:
-                    self.__logger.critical(f"Source and destination checksum don't match for file {message.src}")
+                    self.__logger.critical(
+                        f"Source and destination checksum don't match for file {message.src}")
                 self.__work_queue.task_done()
