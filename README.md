@@ -1,6 +1,24 @@
 # copytool
 Copy dir to another, checking checksum of each file
 
+## Setup
+
+bns_copytool requires python 3.7 and should be installed in a virtual environment.
+
+```bash
+conda create -ncopytool python=3.7
+conda activate copytool
+cd path/to/copytool
+pip install .
+copytool --help
+```
+
+After the script has been installed for the first time, subsequent use only require to activate  the environment:
+```bash
+conda activate copytool
+bns_copytool --help
+```
+
 ## Usage
 
 ```
