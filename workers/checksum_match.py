@@ -14,16 +14,17 @@ class ChecksumMessage:
 
 class ChecksumWorker(threading.Thread):
 
-    def __init__(self, base_directory: str, work_queue: Queue, stop_event: threading.Event, *args, **kwargs):
+    def __init__(self, checksum_alg, base_directory: str, work_queue: Queue, stop_event: threading.Event, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self.__base_dir = base_directory
         self.__work_queue = work_queue
         self.__end = stop_event
         self.__hash_buffer = memoryview(bytearray(1024 * 128))
         self.__logger = logging.getLogger(self.getName())
+        self.__hasher_alg = checksum_alg
 
     def __compute_file_hash(self, filename):
-        hasher = hashlib.sha3_512()
+        hasher = hashlib.new(self.__hasher_alg)
         with open(filename, 'rb', buffering=0) as f:
             for n in iter(lambda: f.readinto(self.__hash_buffer), 0):
                 hasher.update(self.__hash_buffer[:n])
