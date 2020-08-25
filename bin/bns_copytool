@@ -10,13 +10,14 @@ from queue import Queue
 from workers.copyworker import FileCopyMessage, FileCopyWorker
 from workers.filewritter import FileWritterWorker
 from workers.checksum_match import ChecksumWorker, ChecksumMessage
+from progress.bar import Bar
 
 logger = logging.getLogger(__name__)
 
 
 def configure_logging():
     handlers = []
-    handlers.append(logging.StreamHandler(sys.stdout))
+    # handlers.append(logging.StreamHandler(sys.stdout))
     handlers.append(logging.FileHandler('copytool.log', 'w'))
     logging.basicConfig(handlers=handlers, level=logging.WARNING,
                         style='{', format="{asctime} | {levelname} | {name} | {module} | {message}")
@@ -49,12 +50,24 @@ def run_copy_tool(args):
         worker.start()
     filewritter.start()
 
+    print("Determining number of files to copy...", end='', flush=True)
+    nfiles = 0
     for dirpath, dirnames, filenames in os.walk(src_dir):
         rel_path = os.path.relpath(dirpath, src_dir)
         for f in filenames:
             src = os.path.join(dirpath, f)
             dst = os.path.join(dst_dir, rel_path, f)
             work_queue.put(FileCopyMessage(src, dst))
+            nfiles += 1
+    print("\x1b[2K\r", end='', flush=True)
+    bar = Bar("Copying files...", max=nfiles)
+    qsize = work_queue.qsize()
+    while qsize > 0:
+        n = nfiles - qsize
+        n = n - bar.index
+        bar.next(n)
+        qsize = work_queue.qsize()
+    bar.finish()
 
     work_queue.join()
     log_queue.join()
@@ -83,10 +96,21 @@ def run_check_tool(args):
     for worker in workers:
         worker.start()
 
+    nfiles = 0
     with open(checksum_file, "r") as f:
         lines = f.readlines()
+        nfiles = len(lines)
         for line in lines:
             work_queue.put(ChecksumMessage(line))
+
+    bar = Bar("Checking files...", max=nfiles)
+    qsize = work_queue.qsize()
+    while qsize > 0:
+        n = nfiles - qsize
+        n = n - bar.index
+        bar.next(n)
+        qsize = work_queue.qsize()
+    bar.finish()
 
     work_queue.join()
     end.set()
