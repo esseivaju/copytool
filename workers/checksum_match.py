@@ -46,6 +46,8 @@ class ChecksumWorker(threading.Thread):
                     current_checksum = self.__compute_file_hash(f_abs)
                 except FileNotFoundError:
                     self.__logger.critical(f"{f_abs}: File doesn't exist")
+                except Exception:
+                    self.__logger.critical(f"Failed to compute hash for file {f_abs}. It is most likely corrupted")
                 else:
                     if current_checksum == old_checksum:
                         self.__logger.info(f"{f_abs}: Checksum OK")

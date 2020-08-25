@@ -8,7 +8,7 @@ import sys
 import argparse
 from queue import Queue
 from workers.copyworker import FileCopyMessage, FileCopyWorker
-from workers.filewritter import FileWritterWorker
+from workers.filewritter import FileWritterWorker, FileWritterMessage
 from workers.checksum_match import ChecksumWorker, ChecksumMessage
 from progress.bar import Bar
 from progress.spinner import Spinner
@@ -48,8 +48,10 @@ def run_copy_tool(args):
     configure_logging(dst_dir)
 
     checksum_file = os.path.join(dst_dir, args.checksum_file)
+    csv_file = os.path.join(dst_dir, "summary.csv")
+    log_queue.put(FileWritterMessage(csv_file, "filename,checksum\n"))
 
-    workers = [FileCopyWorker(args.cksum, checksum_file, work_queue, log_queue,
+    workers = [FileCopyWorker(args.cksum, checksum_file, csv_file, work_queue, log_queue,
                               end, name=f"copyworker-{i}") for i in range(args.workers)]
 
     for worker in workers:
@@ -142,7 +144,6 @@ if __name__ == "__main__":
                                             'blake2b', 'sha512', 'sha3_384', 'sha256', 'sha3_224', 'sha3_512'], default="sha512")
     args = parser.parse_args()
     args.checksum_file = f"checksum.{args.cksum}"
-
     if args.copy:
         run_copy_tool(args)
     elif args.check:

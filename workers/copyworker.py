@@ -18,9 +18,10 @@ class FileCopyMessage:
 
 class FileCopyWorker(threading.Thread):
 
-    def __init__(self, checksum_alg, checksum_file: str, work_queue: Queue, log_queue: Queue, stop_event: threading.Event, *args, **kwargs):
+    def __init__(self, checksum_alg, checksum_file: str, csv_file: str, work_queue: Queue, log_queue: Queue, stop_event: threading.Event, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self.__checksum_file = checksum_file
+        self.__csv_file = csv_file
         self.__base_dir = os.path.dirname(self.__checksum_file)
         self.__work_queue = work_queue
         self.__log_queue = log_queue
@@ -38,12 +39,13 @@ class FileCopyWorker(threading.Thread):
         return digest
 
     def __log_digest(self, digest, digested_file):
-        log_to = self.__checksum_file
         rel_path = os.path.relpath(
             os.path.dirname(digested_file), self.__base_dir)
         rel_path = os.path.join(rel_path, os.path.basename(digested_file))
-        message = FileWritterMessage(log_to, f"{digest}  {rel_path}\n")
+        message = FileWritterMessage(self.__checksum_file, f"{digest}  {rel_path}\n")
         self.__log_queue.put(message)
+        csv_message = FileWritterMessage(self.__csv_file, f"{rel_path},{digest}\n")
+        self.__log_queue.put(csv_message)
 
     def pre_copy(self, message):
         digest = self.__compute_file_hash(message.src)
@@ -71,12 +73,16 @@ class FileCopyWorker(threading.Thread):
                 except Exception:
                     self.__logger.critical(f"Failed to copy {message.src}, it won't be present in the destination folder. skipping...")
                 else:
-                    digest_post = self.post_copy(message)
-                    if digest_pre == digest_post:
-                        self.__logger.info(
-                            f"File {message.src} copied successfully.")
-                        pass
-                    else:
+                    try:
+                        digest_post = self.post_copy(message)
+                    except Exception:
                         self.__logger.critical(
-                            f"Source and destination checksum don't match for file {message.src}")
+                            f"Failed to compute hash for destination file {message.dst}. It is most likely corrupted")
+                    else:
+                        if digest_pre == digest_post:
+                            self.__logger.info(
+                                f"File {message.src} copied successfully.")
+                        else:
+                            self.__logger.critical(
+                                f"Source and destination checksum don't match for file {message.src}")
                 self.__work_queue.task_done()
