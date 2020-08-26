@@ -51,7 +51,7 @@ def run_copy_tool(args):
     csv_file = os.path.join(dst_dir, "summary.csv")
     log_queue.put(FileWritterMessage(csv_file, "filename,checksum\n"))
 
-    workers = [FileCopyWorker(args.cksum, checksum_file, csv_file, work_queue, log_queue,
+    workers = [FileCopyWorker(args.cksum, checksum_file, csv_file, args.full_copy, work_queue, log_queue,
                               end, name=f"copyworker-{i}") for i in range(args.workers)]
 
     for worker in workers:
@@ -138,10 +138,11 @@ if __name__ == "__main__":
                                   help="Copy mode. Copy the directory src to dst. The checksum is checked before and after copying each file to make sure it was successfully copied. Save checksum files in dst to be used with --check later. Produces a logfile in the current directory")
     workertype_group.add_argument(
         "--check", metavar='dir', help="Check mode. Verify that each file in the specified directory (and subdirectories) still match it's checksum. Each directory should have a checksum.sha3 file with the checksum of each file. Produces a logfile in the current directory")
-    parser.add_argument("--workers", default=os.cpu_count() * 5,
-                        help="Number of workers to use. Default to the number of cpu cores")
+    parser.add_argument("--full-copy", action="store_true", help="By default the script doesn't copy files if the destination already exists and was modified after src. Set this argument to copy every file regardless")
+    parser.add_argument("--workers", default=os.cpu_count() * 5, type=int,
+                        help="Number of workers (threads) to use. Default to the number of cpu cores")
     parser.add_argument("--cksum", choices=['sha384', 'sha1', 'blake2s', 'md5', 'sha3_256', 'sha224',
-                                            'blake2b', 'sha512', 'sha3_384', 'sha256', 'sha3_224', 'sha3_512'], default="sha512")
+                                            'blake2b', 'sha512', 'sha3_384', 'sha256', 'sha3_224', 'sha3_512'], default="sha512", help="Select the checksum algorithm to use")
     args = parser.parse_args()
     args.checksum_file = f"checksum.{args.cksum}"
     if args.copy:

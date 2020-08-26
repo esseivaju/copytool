@@ -18,10 +18,11 @@ class FileCopyMessage:
 
 class FileCopyWorker(threading.Thread):
 
-    def __init__(self, checksum_alg, checksum_file: str, csv_file: str, work_queue: Queue, log_queue: Queue, stop_event: threading.Event, *args, **kwargs):
+    def __init__(self, checksum_alg, checksum_file: str, csv_file: str, full_copy: bool, work_queue: Queue, log_queue: Queue, stop_event: threading.Event, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self.__checksum_file = checksum_file
         self.__csv_file = csv_file
+        self.__full_copy = full_copy
         self.__base_dir = os.path.dirname(self.__checksum_file)
         self.__work_queue = work_queue
         self.__log_queue = log_queue
@@ -64,12 +65,24 @@ class FileCopyWorker(threading.Thread):
             except Empty:
                 continue
             else:
-                digest_pre = self.pre_copy(message)
                 cdir = pathlib.Path(os.path.dirname(message.dst))
                 try:
+                    digest_pre = self.pre_copy(message)
                     if not cdir.exists():
                         cdir.mkdir(parents=True, exist_ok=True)
-                    shutil.copy(message.src, message.dst)
+                    if os.path.isfile(message.dst) and not self.__full_copy:
+                        stat_src = os.lstat(message.src)
+                        stat_dst = os.lstat(message.dst)
+                        if stat_src.st_mtime_ns > stat_dst.st_mtime_ns:
+                            shutil.copy(message.src, message.dst)
+                        else:
+                            self.__logger.warning(f"destination file {message.dst} modified after original file, skipping...")
+                    else:
+                        shutil.copy(message.src, message.dst)
+                except shutil.SpecialFileError:
+                    self.__logger.warning(f" {message.src} is a special file and cannot copier")
+                except shutil.SameFileError:
+                    self.__logger.warning(f"{message.src} Src and dst are the same files, skipping...")
                 except Exception:
                     self.__logger.critical(f"Failed to copy {message.src}, it won't be present in the destination folder. skipping...")
                 else:
