@@ -5,6 +5,7 @@ import threading
 import pathlib
 import logging
 import sys
+import time
 import argparse
 from queue import Queue
 from workers.copyworker import FileCopyMessage, FileCopyWorker
@@ -66,20 +67,33 @@ def run_copy_tool(args):
         for f in filenames:
             src = os.path.join(dirpath, f)
             dst = os.path.join(rel_path, f)
-            work_queue.put(FileCopyMessage(src, dst))
+            message = FileCopyMessage(src, dst)
+
+            if os.path.exists(message.dst):
+                stat_src = os.lstat(message.src)
+                stat_dst = os.lstat(message.dst)
+                if stat_src.st_mtime_ns <= stat_dst.st_mtime_ns:
+                    continue
+            work_queue.put(message)
             nfiles += 1
         spinner.next()
     spinner.finish()
-    # clear line
-    # print("\x1b[2K\r", end='', flush=True)
-    bar = Bar("Copying files...", max=nfiles)
-    qsize = work_queue.qsize()
-    while qsize > 0:
-        n = nfiles - qsize
-        n = n - bar.index
-        bar.next(n)
+
+    if nfiles > 0:
+        # clear line
+        # print("\x1b[2K\r", end='', flush=True)
+        bar = Bar("Copying files...", max=nfiles)
         qsize = work_queue.qsize()
-    bar.finish()
+        while qsize > 0:
+            n = nfiles - qsize
+            n = n - bar.index
+            bar.next(n)
+            time.sleep(1)
+            qsize = work_queue.qsize()
+
+        bar.finish()
+    else:
+        logger.info("no files to copy")
 
     work_queue.join()
     log_queue.join()
