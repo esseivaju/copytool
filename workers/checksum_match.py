@@ -6,7 +6,7 @@ import time
 from queue import Queue, Empty
 
 
-# Message sent to the ChecksumWorker. This should contain one line of the checksum file. 
+# Message sent to the ChecksumWorker. This should contain one line of the checksum file.
 class ChecksumMessage:
 
     def __init__(self, hash_entry):

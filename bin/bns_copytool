@@ -9,7 +9,7 @@ import time
 import argparse
 from queue import Queue
 from workers.copyworker import FileCopyMessage, FileCopyWorker
-from workers.filewritter import FileWritterWorker, FileWritterMessage
+from workers.filewriter import FileWriterWorker, FileWriterMessage
 from workers.checksum_match import ChecksumWorker, ChecksumMessage
 from progress.bar import Bar
 from progress.spinner import Spinner
@@ -17,6 +17,8 @@ from progress.spinner import Spinner
 logger = logging.getLogger(__name__)
 
 
+# Configure logging for the application. Default log level is set to warning.
+# The log file named copytool.log is created in the destination directory
 def configure_logging(dst_dir=None):
     handlers = []
     # handlers.append(logging.StreamHandler(sys.stdout))
@@ -28,17 +30,19 @@ def configure_logging(dst_dir=None):
                         style='{', format="{asctime} | {levelname} | {name} | {module} | {message}")
 
 
+# Called when providing the --copy option to the cli script. Setup worker, walk the  threads and
 def run_copy_tool(args):
     log_queue = Queue()
     work_queue = Queue()
     end = threading.Event()
-    filewritter = FileWritterWorker(log_queue, end)
+    filewriter = FileWriterWorker(log_queue, end)
 
     original_dir = os.getcwd()
 
     src_dir = args.copy[0]
     dst_dir = args.copy[1]
 
+    # Make sure to always work with absolute path
     if not os.path.isabs(src_dir):
         src_dir = os.path.join(original_dir, src_dir)
     if not os.path.isabs(dst_dir):
@@ -50,14 +54,14 @@ def run_copy_tool(args):
 
     checksum_file = os.path.join(dst_dir, args.checksum_file)
     csv_file = os.path.join(dst_dir, "summary.csv")
-    log_queue.put(FileWritterMessage(csv_file, "filename,checksum\n"))
+    log_queue.put(FileWriterMessage(csv_file, "filename,checksum\n"))
 
     workers = [FileCopyWorker(args.cksum, checksum_file, csv_file, args.full_copy, work_queue, log_queue,
                               end, name=f"copyworker-{i}") for i in range(args.workers)]
 
     for worker in workers:
         worker.start()
-    filewritter.start()
+    filewriter.start()
 
     spinner = Spinner("Determining number of files to copy...")
     nfiles = 0
@@ -100,9 +104,13 @@ def run_copy_tool(args):
     end.set()
     for worker in workers:
         worker.join()
-    filewritter.join()
+    filewriter.join()
 
 
+# Run when selecting the --check option as cli argument
+# When executed in this mode, the script expects to find a file named checksum '<hash-alg>' in the directory specified.
+# It will then check the integrity of each file listed in the checksum file.
+# Note that if files are present in the specified directory and not in the checksum file, they will be ignored.
 def run_check_tool(args):
     work_queue = Queue()
     end = threading.Event()
@@ -135,6 +143,7 @@ def run_check_tool(args):
         n = nfiles - qsize
         n = n - bar.index
         bar.next(n)
+        time.sleep(1)
         qsize = work_queue.qsize()
     bar.finish()
 
@@ -144,6 +153,7 @@ def run_check_tool(args):
         worker.join()
 
 
+# Sets up cli arguments, parse them and call the appropriate subcommand function
 if __name__ == "__main__":
 
     parser = argparse.ArgumentParser()

@@ -21,7 +21,7 @@ class FileCopyMessage:
 # Worker which performs copy of files. A hash will be computed before (on the src file) and after (on the dst file) the copy to verify the integrity of copied data
 # Copy can be skipped if the destination file already exist and was more recently modified than the src file.
 #
-# Reads from the work_queue provided in the constructor and uses the log_queue amd FileWriter to write to file. 
+# Reads from the work_queue provided in the constructor and uses the log_queue amd FileWriter to write to file.
 #
 # To stop the thread, stop_event needs to be set. The thread will empty the queue before exiting and should be joined before ending the program
 class FileCopyWorker(threading.Thread):
