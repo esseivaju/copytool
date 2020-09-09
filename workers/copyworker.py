@@ -120,4 +120,5 @@ class FileCopyWorker(threading.Thread):
                         else:
                             self.__logger.critical(
                                 f"Source and destination checksum don't match for file {message.src}")
-                self.__work_queue.task_done()
+                finally:
+                    self.__work_queue.task_done()

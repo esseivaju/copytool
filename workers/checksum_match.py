@@ -65,4 +65,5 @@ class ChecksumWorker(threading.Thread):
                         self.__logger.info(f"{f_abs}: Checksum OK")
                     else:
                         self.__logger.critical(f"{f_abs}: Checksum mismatch")
-                self.__work_queue.task_done()
+                finally:
+                    self.__work_queue.task_done()
